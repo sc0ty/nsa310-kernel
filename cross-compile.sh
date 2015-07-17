@@ -1,8 +1,8 @@
 #!/bin/sh
 
-CROSS_COMPILE=arm-linux-gnueabi- 
-ARCH=arm
-LOADADDR=0x8000
+export CROSS_COMPILE=arm-linux-gnueabi- 
+export ARCH=arm
+export LOADADDR=0x8000
 TARGETDIR=out
 
 
