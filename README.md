@@ -21,3 +21,8 @@ cd linux-<version>
 ```
 Your kernel and modules will be created in `out` directory.
 
+I made it to blank sys led during boot. To stop blinking when system is ready, you should add
+```
+echo "default-on" > /sys/class/leds/nsa310:green:sys/trigger
+```
+to your `/etc/rc.local`. You could edit default leds config in `arch/arm/boot/dts/kirkwood-nsa310.dtb`.
