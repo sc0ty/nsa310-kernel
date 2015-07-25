@@ -1,0 +1,160 @@
+diff -rupN linux-3.18.18/arch/arm/boot/dts/kirkwood-nsa310.dts linux-3.18.18-nsa310/arch/arm/boot/dts/kirkwood-nsa310.dts
+--- linux-3.18.18/arch/arm/boot/dts/kirkwood-nsa310.dts	2015-07-10 02:46:48.000000000 +0200
++++ linux-3.18.18-nsa310/arch/arm/boot/dts/kirkwood-nsa310.dts	2015-07-17 12:17:00.000000000 +0200
+@@ -99,6 +99,7 @@
+ 		green-sys {
+ 			label = "nsa310:green:sys";
+ 			gpios = <&gpio0 28 GPIO_ACTIVE_HIGH>;
++			linux,default-trigger = "timer";
+ 		};
+ 		red-sys {
+ 			label = "nsa310:red:sys";
+@@ -111,6 +112,7 @@
+ 		red-hdd {
+ 			label = "nsa310:red:hdd";
+ 			gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
++			linux,default-trigger = "sata-disk";
+ 		};
+ 		green-esata {
+ 			label = "nsa310:green:esata";
+@@ -127,6 +129,7 @@
+ 		red-usb {
+ 			label = "nsa310:red:usb";
+ 			gpios = <&gpio0 16 GPIO_ACTIVE_HIGH>;
++			linux,default-trigger = "usb-host";
+ 		};
+ 		green-copy {
+ 			label = "nsa310:green:copy";
+diff -rupN linux-3.18.18/drivers/ata/sata_mv.c linux-3.18.18-nsa310/drivers/ata/sata_mv.c
+--- linux-3.18.18/drivers/ata/sata_mv.c	2015-07-10 02:46:48.000000000 +0200
++++ linux-3.18.18-nsa310/drivers/ata/sata_mv.c	2015-07-17 14:44:53.933495089 +0200
+@@ -72,6 +72,7 @@
+ #include <scsi/scsi_cmnd.h>
+ #include <scsi/scsi_device.h>
+ #include <linux/libata.h>
++#include <linux/leds.h>
+ 
+ #define DRV_NAME	"sata_mv"
+ #define DRV_VERSION	"1.28"
+@@ -1170,6 +1171,8 @@ static void mv_start_edma(struct ata_por
+ {
+ 	int want_ncq = (protocol == ATA_PROT_NCQ);
+ 
++	ledtrig_sata_activity();
++
+ 	if (pp->pp_flags & MV_PP_FLAG_EDMA_EN) {
+ 		int using_ncq = ((pp->pp_flags & MV_PP_FLAG_NCQ_EN) != 0);
+ 		if (want_ncq != using_ncq)
+diff -rupN linux-3.18.18/drivers/leds/trigger/Kconfig linux-3.18.18-nsa310/drivers/leds/trigger/Kconfig
+--- linux-3.18.18/drivers/leds/trigger/Kconfig	2015-07-10 02:46:48.000000000 +0200
++++ linux-3.18.18-nsa310/drivers/leds/trigger/Kconfig	2015-07-17 14:47:06.733490422 +0200
+@@ -41,6 +41,14 @@ config LEDS_TRIGGER_IDE_DISK
+ 	  This allows LEDs to be controlled by IDE disk activity.
+ 	  If unsure, say Y.
+ 
++config LEDS_TRIGGER_SATA_DISK
++	bool "LED SATA Disk Trigger"
++	depends on ATA
++	depends on LEDS_TRIGGERS
++	help
++ 	  This allows LEDs to be controlled by IDE disk activity.
++ 	  If unsure, say Y.
++
+ config LEDS_TRIGGER_HEARTBEAT
+ 	tristate "LED Heartbeat Trigger"
+ 	depends on LEDS_TRIGGERS
+diff -rupN linux-3.18.18/drivers/leds/trigger/ledtrig-sata-disk.c linux-3.18.18-nsa310/drivers/leds/trigger/ledtrig-sata-disk.c
+--- linux-3.18.18/drivers/leds/trigger/ledtrig-sata-disk.c	1970-01-01 01:00:00.000000000 +0100
++++ linux-3.18.18-nsa310/drivers/leds/trigger/ledtrig-sata-disk.c	2015-07-17 00:20:00.000000000 +0200
+@@ -0,0 +1,64 @@
++/*
++ * LED SATA-Disk Activity Trigger
++ *
++ * Copyright 2006 Openedhand Ltd.
++ *
++ * Author: Richard Purdie <rpurdie@openedhand.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ */
++
++#include <linux/module.h>
++#include <linux/jiffies.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/timer.h>
++#include <linux/leds.h>
++
++static void ledtrig_sata_timerfunc(unsigned long data);
++
++DEFINE_LED_TRIGGER(ledtrig_sata);
++static DEFINE_TIMER(ledtrig_sata_timer, ledtrig_sata_timerfunc, 0, 0);
++static int sata_activity;
++static int sata_lastactivity;
++
++void ledtrig_sata_activity(void)
++{
++	sata_activity++;
++	if (!timer_pending(&ledtrig_sata_timer))
++		mod_timer(&ledtrig_sata_timer, jiffies + msecs_to_jiffies(10));
++}
++EXPORT_SYMBOL(ledtrig_sata_activity);
++
++static void ledtrig_sata_timerfunc(unsigned long data)
++{
++	if (sata_lastactivity != sata_activity) {
++		sata_lastactivity = sata_activity;
++		/* INT_MAX will set each LED to its maximum brightness */
++		led_trigger_event(ledtrig_sata, INT_MAX);
++		mod_timer(&ledtrig_sata_timer, jiffies + msecs_to_jiffies(10));
++	} else {
++		led_trigger_event(ledtrig_sata, LED_OFF);
++	}
++}
++
++static int __init ledtrig_sata_init(void)
++{
++	led_trigger_register_simple("sata-disk", &ledtrig_sata);
++	return 0;
++}
++
++static void __exit ledtrig_sata_exit(void)
++{
++	led_trigger_unregister_simple(ledtrig_sata);
++}
++
++module_init(ledtrig_sata_init);
++module_exit(ledtrig_sata_exit);
++
++MODULE_AUTHOR("Richard Purdie <rpurdie@openedhand.com>");
++MODULE_DESCRIPTION("LED IDE Disk Activity Trigger");
++MODULE_LICENSE("GPL");
+diff -rupN linux-3.18.18/drivers/leds/trigger/Makefile linux-3.18.18-nsa310/drivers/leds/trigger/Makefile
+--- linux-3.18.18/drivers/leds/trigger/Makefile	2015-07-10 02:46:48.000000000 +0200
++++ linux-3.18.18-nsa310/drivers/leds/trigger/Makefile	2015-07-17 14:47:39.077489285 +0200
+@@ -1,6 +1,7 @@
+ obj-$(CONFIG_LEDS_TRIGGER_TIMER)	+= ledtrig-timer.o
+ obj-$(CONFIG_LEDS_TRIGGER_ONESHOT)	+= ledtrig-oneshot.o
+ obj-$(CONFIG_LEDS_TRIGGER_IDE_DISK)	+= ledtrig-ide-disk.o
++obj-$(CONFIG_LEDS_TRIGGER_SATA_DISK)	+= ledtrig-sata-disk.o
+ obj-$(CONFIG_LEDS_TRIGGER_HEARTBEAT)	+= ledtrig-heartbeat.o
+ obj-$(CONFIG_LEDS_TRIGGER_BACKLIGHT)	+= ledtrig-backlight.o
+ obj-$(CONFIG_LEDS_TRIGGER_GPIO)		+= ledtrig-gpio.o
+diff -rupN linux-3.18.18/include/linux/leds.h linux-3.18.18-nsa310/include/linux/leds.h
+--- linux-3.18.18/include/linux/leds.h	2015-07-10 02:46:48.000000000 +0200
++++ linux-3.18.18-nsa310/include/linux/leds.h	2015-07-17 00:24:00.000000000 +0200
+@@ -230,6 +230,12 @@ extern void ledtrig_ide_activity(void);
+ static inline void ledtrig_ide_activity(void) {}
+ #endif
+ 
++#ifdef CONFIG_LEDS_TRIGGER_SATA_DISK
++extern void ledtrig_sata_activity(void);
++#else
++static inline void ledtrig_sata_activity(void) {}
++#endif
++
+ #if defined(CONFIG_LEDS_TRIGGER_CAMERA) || defined(CONFIG_LEDS_TRIGGER_CAMERA_MODULE)
+ extern void ledtrig_flash_ctrl(bool on);
+ extern void ledtrig_torch_ctrl(bool on);
