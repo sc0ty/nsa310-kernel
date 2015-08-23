@@ -11,7 +11,7 @@ Just run script `./prepare-<version>.sh`. This will download, extract and patch 
 ## CROSS COMPILATION
 Under Ubuntu:
 ```
-sudo apt-get install fakeroot build-essential kexec-tools kernel-wedge gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabihf libncurses5 libncurses5-dev libelf-dev asciidoc binutils-dev
+sudo apt-get install fakeroot build-essential kexec-tools kernel-wedge gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabihf libncurses5 libncurses5-dev libelf-dev asciidoc binutils-dev u-boot-tools
 sudo apt-get build-dep linux
 ```
 You may want to change `CONFIG_CMDLINE` in config. I have to hardcode it - uBoot `cmdargs` is not working with this kernel for some reason.
